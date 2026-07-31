@@ -1,3 +1,8 @@
+#ifndef CHIP8_HPP
+#define CHIP8_HPP
+#include <cstdio>
+#include <algorithm> 
+
 class chip8
 {
 private:
@@ -6,11 +11,16 @@ private:
     unsigned char V[16];
     unsigned short I;
     unsigned short pc;
-    unsigned short stack[16];   // Stores return addresses for subroutines
-    unsigned short sp;          // Stack Pointer
-public:
-    chip8(/* args */);
+    unsigned short stack[16];   // Return addresses
+    unsigned short sp;          // Stack pointer
+    
+    // Timers 
+    unsigned char delay_timer; 
+    unsigned char sound_timer; 
 
+public:
+    chip8();
+    void emulateCycle();
 };
 
-
+#endif
