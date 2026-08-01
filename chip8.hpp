@@ -21,6 +21,7 @@ private:
 public:
     chip8();
     void emulateCycle();
+    
 };
 
 #endif
