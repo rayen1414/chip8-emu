@@ -2,7 +2,10 @@
 #include <iterator>
 #include <algorithm>
 #include <cstdlib> // For rand()
-
+#include <chrono>
+#include <iostream>
+#include <thread>
+using namespace std::chrono;
 // Font data for digits 0-F (5 bytes each)
 const unsigned char chip8_fontset[80] = { 
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -35,20 +38,38 @@ chip8::chip8() {
     std::fill(std::begin(memory), std::end(memory), 0);
     std::fill(std::begin(V), std::end(V), 0);
     std::fill(std::begin(stack), std::end(stack), 0);
-    std::fill(std::begin(gfx), std::end(gfx), 0);
     std::fill(std::begin(key), std::end(key), 0);
+    std::fill(std::begin(gfx), std::end(gfx), 0);
+
 
     // Load font into memory (0x00 - 0x50)
     for (int i = 0; i < 80; ++i) {
         memory[i] = chip8_fontset[i];
     }
+    timer_loop();
 }
+void chip8::setKeyState(int keyIndex, bool isPressed) {
+        key[keyIndex] = isPressed ? 1 : 0;
 
+}
+void chip8::timer_loop() {
+    std::thread t([this]() {
+        auto time = 16666us;
+        while (true) {
+            std::this_thread::sleep_for(time);
+            
+            // Decrement at 60 Hz in background
+            if (delay_timer > 0) delay_timer--;
+            if (sound_timer > 0) sound_timer--;
+        }
+    });
+    t.detach();
+}
 void chip8::emulateCycle() {
     // Fetch 2-byte opcode
     opcode = (memory[pc] << 8) | memory[pc + 1];
 
-    // Common variable extraction for convenience
+    //  variable 
     unsigned char x = (opcode & 0x0F00) >> 8;
     unsigned char y = (opcode & 0x00F0) >> 4;
     unsigned char nn = opcode & 0x00FF;
@@ -59,10 +80,6 @@ void chip8::emulateCycle() {
         
         case 0x0000:
             switch (opcode & 0x00FF) {
-                case 0x00E0: // Clear screen
-                    std::fill(std::begin(gfx), std::end(gfx), 0);
-                    pc += 2;
-                    break;
 
                 case 0x00EE: // Return from subroutine
                     --sp;
@@ -194,47 +211,27 @@ void chip8::emulateCycle() {
             V[x] = (rand() % 256) & nn;
             pc += 2;
             break;
-
-        case 0xD000: // Draw sprite at (VX, VY) with height N
-            {
-                unsigned short vx = V[x];
-                unsigned short vy = V[y];
-                unsigned short height = opcode & 0x000F;
-                unsigned short pixel;
-
-                V[0xF] = 0; // Reset collision flag
-
-                for (int yline = 0; yline < height; yline++) {
-                    pixel = memory[I + yline];
-                    for (int xline = 0; xline < 8; xline++) {
-                        if ((pixel & (0x80 >> xline)) != 0) {
-                            int targetPixel = (vx + xline) % 64 + ((vy + yline) % 32) * 64;
-                            if (gfx[targetPixel] == 1) {
-                                V[0xF] = 1; // Collision detected
-                            }
-                            gfx[targetPixel] ^= 1;
-                        }
-                    }
-                }
+    case 0xE000:
+    switch (opcode & 0x00FF) {
+        case 0x009E: // Skip next instruction if key in V[x] is pressed
+            if (key[V[x]] != 0) {
+                pc += 4;
+            } else {
                 pc += 2;
             }
             break;
 
-        case 0xE000:
-            switch (opcode & 0x00FF) {
-                case 0x009E: // Skip if key stored in VX is pressed
-                    if (key[V[x]] != 0) pc += 4;
-                    else pc += 2;
-                    break;
-
-                case 0x00A1: // Skip if key stored in VX is NOT pressed
-                    if (key[V[x]] == 0) pc += 4;
-                    else pc += 2;
-                    break;
-
-                default:
-                    printf("Unknown opcode [0xE000]: 0x%X\n", opcode);
+        case 0x00A1: // Skip next instruction if key in V[x] is NOT pressed
+            if (key[V[x]] == 0) {
+                pc += 4;
+            } else {
+                pc += 2;
             }
+            break;
+
+        default:
+            printf("Unknown opcode [0xE000]: 0x%X\n", opcode);
+    }
             break;
 
         case 0xF000:
@@ -244,20 +241,6 @@ void chip8::emulateCycle() {
                     pc += 2;
                     break;
 
-                case 0x000A: // Wait for key press
-                    {
-                        bool key_pressed = false;
-                        for (int i = 0; i < 16; ++i) {
-                            if (key[i] != 0) {
-                                V[x] = i;
-                                key_pressed = true;
-                                break;
-                            }
-                        }
-                        // Only advance PC if a key was pressed, otherwise stay on same opcode
-                        if (key_pressed) pc += 2;
-                    }
-                    break;
 
                 case 0x0015: // delay_timer = VX
                     delay_timer = V[x];
@@ -301,23 +284,51 @@ void chip8::emulateCycle() {
                     }
                     pc += 2;
                     break;
+                case 0x000A: // Wait for a key press, store key in V[x]
+                 {
+                    bool key_pressed = false;
 
+                    for (int i = 0; i < 16; ++i) {
+                        if (key[i] != 0) {
+                            V[x] = i;
+                            key_pressed = true;
+                            break;
+                        }
+                    }
+                    if (!key_pressed) {
+                        return; 
+                    }
+
+                    pc += 2;
+                }
+                break;
                 default:
                     printf("Unknown opcode [0xF000]: 0x%X\n", opcode);
             }
             break;
+        case 0xD000:{// Draw sprite at (VX, VY) with height N
+            unsigned char height = opcode & 0x000F;
+            V[0xF] = 0;
+            for(int yline=0;yline<height;yline++){
+                for(int xline=0 ;xline<8;xline++){
+                    int xPos = (V[x] + xline)%64;
+                    int yPos = (V[y] + yline) % 32;
+                if((memory[I+yline] & (0x80 >> xline)) != 0){
+                if (gfx[xPos + (yPos * 64)] == 1) {
+                    V[0xF] = 1;//collision
+                }
+            
+                gfx[xPos + (yPos * 64)] ^= 1;
+                }
+            }
+            }
+            pc+=2;
+            break;
+        }
 
         default:
             printf("Unknown opcode: 0x%X\n", opcode);
     }
 
-    // Decrement timers at 60Hz
-    if (delay_timer > 0)
-        --delay_timer;
 
-    if (sound_timer > 0) {
-        if (sound_timer == 1)
-            printf("BEEP!\n");
-        --sound_timer;
-    }
 }
