@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include<fstream>
 using namespace std::chrono;
 // Font data for digits 0-F (5 bytes each)
 const unsigned char chip8_fontset[80] = { 
@@ -49,13 +50,15 @@ chip8::chip8() {
     timer_loop();
 }
 void chip8::setKeyState(int keyIndex, bool isPressed) {
+        if (keyIndex >= 0 && keyIndex < 16) {
         key[keyIndex] = isPressed ? 1 : 0;
+    }
 
 }
 void chip8::timer_loop() {
     std::thread t([this]() {
         auto time = 16666us;
-        while (true) {
+        while (isRunning) {
             std::this_thread::sleep_for(time);
             
             // Decrement at 60 Hz in background
@@ -319,6 +322,7 @@ void chip8::emulateCycle() {
                 }
             
                 gfx[xPos + (yPos * 64)] ^= 1;
+                drawflag= true;
                 }
             }
             }
@@ -330,5 +334,23 @@ void chip8::emulateCycle() {
             printf("Unknown opcode: 0x%X\n", opcode);
     }
 
+
+}
+void chip8::loadfile(const std::string& filePath){
+    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+
+    if (!file.is_open()) {
+        std::cerr << " Could not open file: " << filePath << std::endl;
+        return;
+    }
+    std::streamsize filesize = file.tellg();
+    if (filesize <= 0 || filesize > (4096 - 0x200)) {
+        std::cerr << "Invalid ROM size (" << filesize << " bytes). Fits max 3584 bytes." << std::endl;
+        file.close();
+        return;
+    }
+    file.seekg(0, std::ios::beg);
+    file.read(reinterpret_cast<char*>(&memory[0x200]), filesize);
+    file.close();
 
 }

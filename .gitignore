@@ -1,0 +1,17 @@
+# Build outputs & executables
+build/
+*.o
+*.obj
+*.exe
+chip8-emu
+
+# Qt generated files
+Makefile*
+*.qmake.stash
+
+*.user
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp

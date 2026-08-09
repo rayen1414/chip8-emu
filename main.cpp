@@ -1,38 +1,29 @@
-#include "chip8.hpp"
+#include <QApplication>
 #include <iostream>
-void processInput(chip8& c8, int keyboardKey, bool isPressed) {
-    switch (keyboardKey) {
-        case KEY_1: c8.setKeyState(0x1, isPressed); break;
-        case KEY_2: c8.setKeyState(0x2, isPressed); break;
-        case KEY_3: c8.setKeyState(0x3, isPressed); break;
-        case KEY_4: c8.setKeyState(0xC, isPressed); break;
+#include "chip8.hpp"
+#include "interface.hpp"
 
-        case KEY_Q: c8.setKeyState(0x4, isPressed); break;
-        case KEY_W: c8.setKeyState(0x5, isPressed); break;
-        case KEY_E: c8.setKeyState(0x6, isPressed); break;
-        case KEY_R: c8.setKeyState(0xD, isPressed); break;
-
-        case KEY_A: c8.setKeyState(0x7, isPressed); break;
-        case KEY_S: c8.setKeyState(0x8, isPressed); break;
-        case KEY_D: c8.setKeyState(0x9, isPressed); break;
-        case KEY_F: c8.setKeyState(0xE, isPressed); break;
-
-        case KEY_Z: c8.setKeyState(0xA, isPressed); break;
-        case KEY_X: c8.setKeyState(0x0, isPressed); break;
-        case KEY_C: c8.setKeyState(0xB, isPressed); break;
-        case KEY_V: c8.setKeyState(0xF, isPressed); break;
-    }
-}
-int main() {
+int main(int argc, char *argv[]){
     // Create instance
     chip8 myChip8;
-
+    QApplication app(argc, argv);
+    Interface window(&myChip8);
+    window.show();
+    return app.exec();
     //  Load ROM 
-
+    if (argc > 1) mychip8.loadfile(argv[1]);
+    else return(0);
     //Emulation Loop
-    while (true) {
-        myChip8.emulateCycle();
-    }
+    QTimer timer;
+    QObject::connect(&timer, &QTimer::timeout, [&]() {
+        myChip8.emulateCycle(); //run one opcode
+        if (myChip8.drawflag) {//if there is pix change we redraw
+            window.update();          
+            myChip8.drawflag = false; // Reset flag
+        }
+    });
 
+    timer.start(2); // Runs every 2 milliseconds
+    return app.exec();
     return 0;
 }
