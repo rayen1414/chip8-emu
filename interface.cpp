@@ -1,27 +1,38 @@
 #include "interface.hpp"
+#include <QPainter>
+#include <QPixmap> 
+#include<iostream>
+#include <QKeyEvent>
 
 Interface::Interface(chip8* emulator, QWidget *parent)
-    : QWidget(parent), c8(emulator){
+    : QWidget(parent), c8(emulator), buffer(640, 320) { 
     setWindowTitle("chip8");
     setFixedSize(640, 320);
     setFocusPolicy(Qt::StrongFocus);
+    buffer.fill(Qt::black);
 }
+
 void Interface::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
 
-    QPainter painter(this);
-    painter.fillRect(rect(), Qt::black);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(Qt::white);
+    QPainter bufferPainter(&buffer);
+    bufferPainter.fillRect(buffer.rect(), Qt::black);
+    bufferPainter.setPen(Qt::NoPen);
+    bufferPainter.setBrush(Qt::white);
+
     for (int y = 0; y < 32; ++y) {
         for (int x = 0; x < 64; ++x) {
             if (c8->gfx[(y * 64) + x] == 1) {
-                painter.drawRect(x * 10, y * 10, 10, 10);
+                bufferPainter.drawRect(x * 10, y * 10, 10, 10);
             }
         }
     }
+    bufferPainter.end();
+
+    QPainter screenPainter(this);
+    screenPainter.drawPixmap(0, 0, buffer); 
 }
-void processInput(chip8& c8, int keyboardKey, bool isPressed) {
+void Interface::processInput(chip8& c8, int keyboardKey, bool isPressed) {
     switch (keyboardKey) {
         case Qt::Key_1: c8.setKeyState(0x1, isPressed); break;
         case Qt::Key_2: c8.setKeyState(0x2, isPressed); break;

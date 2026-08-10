@@ -34,7 +34,7 @@ chip8::chip8() {
     sp          = 0;     
     delay_timer = 0;     
     sound_timer = 0;
-
+    drawflag    = false;
     // Reset memory, registers, stack, graphics, and keys
     std::fill(std::begin(memory), std::end(memory), 0);
     std::fill(std::begin(V), std::end(V), 0);
@@ -47,7 +47,7 @@ chip8::chip8() {
     for (int i = 0; i < 80; ++i) {
         memory[i] = chip8_fontset[i];
     }
-    timer_loop();
+    
 }
 void chip8::setKeyState(int keyIndex, bool isPressed) {
         if (keyIndex >= 0 && keyIndex < 16) {
@@ -55,19 +55,7 @@ void chip8::setKeyState(int keyIndex, bool isPressed) {
     }
 
 }
-void chip8::timer_loop() {
-    std::thread t([this]() {
-        auto time = 16666us;
-        while (isRunning) {
-            std::this_thread::sleep_for(time);
-            
-            // Decrement at 60 Hz in background
-            if (delay_timer > 0) delay_timer--;
-            if (sound_timer > 0) sound_timer--;
-        }
-    });
-    t.detach();
-}
+
 void chip8::emulateCycle() {
     // Fetch 2-byte opcode
     opcode = (memory[pc] << 8) | memory[pc + 1];
@@ -83,7 +71,11 @@ void chip8::emulateCycle() {
         
         case 0x0000:
             switch (opcode & 0x00FF) {
-
+                case 0x00E0: // CLS: Clear the display
+                    std::fill(std::begin(gfx), std::end(gfx), 0);
+                    
+                    pc += 2;
+                    break;
                 case 0x00EE: // Return from subroutine
                     --sp;
                     pc = stack[sp];
@@ -170,9 +162,9 @@ void chip8::emulateCycle() {
                     }
                     break;
 
-                case 0x0006: // VX >> 1
-                    V[0xF] = V[x] & 0x1;
-                    V[x] >>= 1;
+                case 0x0006: // VX = VY >> 1
+                    V[0xF] = V[y] & 0x1;
+                    V[x] = V[y] >> 1;
                     pc += 2;
                     break;
 
@@ -185,9 +177,9 @@ void chip8::emulateCycle() {
                     }
                     break;
 
-                case 0x000E: // VX << 1
-                    V[0xF] = (V[x] & 0x80) >> 7;
-                    V[x] <<= 1;
+                case 0x000E: // VX = VY << 1
+                    V[0xF] = (V[y] & 0x80) >> 7;
+                    V[x] = V[y] << 1;
                     pc += 2;
                     break;
 
@@ -309,26 +301,37 @@ void chip8::emulateCycle() {
                     printf("Unknown opcode [0xF000]: 0x%X\n", opcode);
             }
             break;
-        case 0xD000:{// Draw sprite at (VX, VY) with height N
-            unsigned char height = opcode & 0x000F;
-            V[0xF] = 0;
-            for(int yline=0;yline<height;yline++){
-                for(int xline=0 ;xline<8;xline++){
-                    int xPos = (V[x] + xline)%64;
-                    int yPos = (V[y] + yline) % 32;
-                if((memory[I+yline] & (0x80 >> xline)) != 0){
-                if (gfx[xPos + (yPos * 64)] == 1) {
-                    V[0xF] = 1;//collision
+            case 0xD000: { // Draw sprite at (VX, VY) with height N
+                uint8_t height = opcode & 0x000F;
+                uint8_t x_start = V[x] % 64;
+                uint8_t y_start = V[y] % 32;
+
+                V[0xF] = 0;
+
+                for (int yline = 0; yline < height; ++yline) {
+                    uint8_t sprite_byte = memory[I + yline];
+                    uint8_t yPos = (y_start + yline) % 32;
+
+                    for (int xline = 0; xline < 8; ++xline) {
+                        // Extract the specific bit (MSB to LSB)
+                        if ((sprite_byte & (0x80 >> xline)) != 0) {
+                            uint8_t xPos = (x_start + xline) % 64;
+                            int index = xPos + (yPos * 64);
+
+                            if (gfx[index] == 1) {
+                                V[0xF] = 1; // Collision
+                            }
+
+                            gfx[index] ^= 1; // XOR pixel
+                        }
+                    }
                 }
+
+                drawflag = true;
+                pc += 2;
+                break;
+            }
             
-                gfx[xPos + (yPos * 64)] ^= 1;
-                drawflag= true;
-                }
-            }
-            }
-            pc+=2;
-            break;
-        }
 
         default:
             printf("Unknown opcode: 0x%X\n", opcode);
@@ -336,21 +339,22 @@ void chip8::emulateCycle() {
 
 
 }
-void chip8::loadfile(const std::string& filePath){
+bool chip8::loadfile(const std::string& filePath){
     std::ifstream file(filePath, std::ios::binary | std::ios::ate);
 
     if (!file.is_open()) {
         std::cerr << " Could not open file: " << filePath << std::endl;
-        return;
+        return(false);
     }
     std::streamsize filesize = file.tellg();
     if (filesize <= 0 || filesize > (4096 - 0x200)) {
         std::cerr << "Invalid ROM size (" << filesize << " bytes). Fits max 3584 bytes." << std::endl;
         file.close();
-        return;
+        return(false);
     }
     file.seekg(0, std::ios::beg);
     file.read(reinterpret_cast<char*>(&memory[0x200]), filesize);
     file.close();
-
+    pc = 0x200;
+    return true;
 }

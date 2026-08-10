@@ -2,7 +2,8 @@
 #define CHIP8_HPP
 #include <cstdio>
 #include <algorithm> 
-#include <atomic>
+#include <string>
+#include <cstdint>
 class chip8
 {
 private:
@@ -14,19 +15,17 @@ private:
     unsigned short stack[16];   // Return addresses
     unsigned short sp;          // Stack pointer
     // Timers 
-    std::atomic<uint8_t> delay_timer{0};
-    std::atomic<uint8_t> sound_timer{0};
-    std::atomic<bool> isRunning{true}; // 
     unsigned char key[16]; // Stores state of keys
 
 public:
-    unsigned short gfx[2048]; //screen grid
+    uint8_t gfx[2048]; //screen grid
     chip8();
     bool drawflag;
+    uint8_t delay_timer;
+    uint8_t sound_timer;
     void emulateCycle();
-    void timer_loop();//timer
     void setKeyState(int keyIndex, bool isPressed);
-    void loadfile(const std::string &filePath);
+    bool loadfile(const std::string &filePath);
 };
 
 #endif
